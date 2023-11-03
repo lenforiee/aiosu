@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import hashlib
 from typing import Any
-from typing import Union
 from typing import TextIO
 
 from ...models.files.beatmap import BeatmapFile
@@ -29,7 +28,7 @@ def _parse_section_value_from_str(s: str) -> str:
     return s.split(":", 1)[1].strip()
 
 
-def _parse_general_section_line(line: str) -> tuple[str, Union[str, int, float, bool]]:
+def _parse_general_section_line(line: str) -> tuple[str, Any]:
     value = _parse_section_value_from_str(line)
 
     if line.startswith("AudioFilename"):
@@ -93,7 +92,7 @@ def _parse_general_section_line(line: str) -> tuple[str, Union[str, int, float, 
         raise ValueError(f"Unsupported general section line: {line}")
 
 
-def _parse_editor_section_line(line: str) -> tuple[str, Union[list[int], int, float]]:
+def _parse_editor_section_line(line: str) -> tuple[str, Any]:
     value = _parse_section_value_from_str(line)
 
     if line.startswith("Bookmarks"):
@@ -115,7 +114,7 @@ def _parse_editor_section_line(line: str) -> tuple[str, Union[list[int], int, fl
         raise ValueError(f"Unsupported editor section line: {line}")
 
 
-def _parse_metadata_section_line(line: str) -> tuple[str, Union[list[str], str, int]]:
+def _parse_metadata_section_line(line: str) -> tuple[str, Any]:
     value = _parse_section_value_from_str(line)
 
     if line.startswith("Title:"):
@@ -152,7 +151,7 @@ def _parse_metadata_section_line(line: str) -> tuple[str, Union[list[str], str, 
         raise ValueError(f"Unsupported metadata section line: {line}")
 
 
-def _parse_difficulty_section_line(line: str) -> tuple[str, float]:
+def _parse_difficulty_section_line(line: str) -> tuple[str, Any]:
     value = _parse_section_value_from_str(line)
 
     if line.startswith("HPDrainRate"):
@@ -177,6 +176,54 @@ def _parse_difficulty_section_line(line: str) -> tuple[str, float]:
         raise ValueError(f"Unsupported difficulty section line: {line}")
 
 
+STORYBOARD_EVENTS = ["Sprite", "Animation", "Sample"]
+
+
+def _parse_events_section_line(line: str) -> tuple[str, Any]:
+    values = line.split(",")
+    event_type = values[0]
+
+    if line[0] == " " or event_type in STORYBOARD_EVENTS:
+        return "storyboard_data", line
+
+    elif event_type == "0":
+        background: dict[str, Any] = {
+            "filename": values[2].strip('"'),
+        }
+
+        if len(values) > 3:
+            background["x_offset"] = int(values[3])
+
+        if len(values) > 4:
+            background["y_offset"] = int(values[4])
+
+        return "background", background
+
+    elif event_type in ["1", "Video"]:
+        video: dict[str, Any] = {
+            "start_time": int(values[1]),
+            "filename": values[2].strip('"'),
+        }
+
+        if len(values) > 3:
+            video["x_offset"] = int(values[3])
+
+        if len(values) > 4:
+            video["y_offset"] = int(values[4])
+
+        return "videos", video
+
+    elif event_type in ["2", "Break"]:
+        break_period: dict[str, Any] = {
+            "start_time": int(values[1]),
+            "end_time": int(values[2]),
+        }
+
+        return "break_periods", break_period
+    else:
+        raise ValueError(f"Unsupported events section line: {line}")
+
+
 def parse_file(file: TextIO) -> BeatmapFile:
     """Parse a beatmap file and return a dictionary with the beatmap data.
 
@@ -190,6 +237,7 @@ def parse_file(file: TextIO) -> BeatmapFile:
     editor: dict[str, Any] = {}
     metadata: dict[str, Any] = {}
     difficulty: dict[str, Any] = {}
+    events: dict[str, Any] = {}
 
     buffer = file.read()
     lines = buffer.splitlines()
@@ -204,7 +252,7 @@ def parse_file(file: TextIO) -> BeatmapFile:
             continue
 
         if line.startswith("[") and line.endswith("]"):
-            section = line.strip("[]").strip().lower()
+            section = line.strip("[]").lower()
             continue
 
         if section == "general":
@@ -223,6 +271,21 @@ def parse_file(file: TextIO) -> BeatmapFile:
             difficulty_key, difficulty_value = _parse_difficulty_section_line(line)
             difficulty[difficulty_key] = difficulty_value
 
+        elif section == "events":
+            if line.startswith("//"):
+                continue
+
+            events_key, events_value = _parse_events_section_line(line)
+
+            if events_key == "background":
+                events[events_key] = events_value
+                continue
+
+            if not events_key in events:
+                events[events_key] = []
+
+            events[events_key].append(events_value)
+
         # else:
         #     raise ValueError(f"Unsupported section: {section}")
 
@@ -230,6 +293,7 @@ def parse_file(file: TextIO) -> BeatmapFile:
     beatmap["editor"] = editor
     beatmap["metadata"] = metadata
     beatmap["difficulty"] = difficulty
+    beatmap["events"] = events
 
     return BeatmapFile(**beatmap)
 

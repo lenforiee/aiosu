@@ -17,6 +17,9 @@ __all__ = (
     "Countdown",
     "SampleSet",
     "OverlayPosition",
+    "BackgroundEvent",
+    "VideoEvent",
+    "BreakPeriodEvent",
 )
 
 EARLY_VERSION_TIMING_OFFSET = 24
@@ -167,7 +170,7 @@ class MetadataSection(BaseModel):
     version: str
     source: Optional[str] = None
     tags: Optional[list[str]] = None
-    beatmap_id: Optional[int] = None  # TLDR: osu before relied on beatmap hash.
+    beatmap_id: Optional[int] = None  # TLDR: osu before relied on beatmap/audio hash.
     beatmap_set_id: Optional[int] = None
 
 
@@ -180,6 +183,32 @@ class DifficultySection(BaseModel):
     slider_tick_rate: float
 
 
+class BackgroundEvent(BaseModel):
+    filename: str
+    x_offset: Optional[int] = None
+    y_offset: Optional[int] = None
+
+
+class VideoEvent(BaseModel):
+    start_time: int
+    filename: str
+    x_offset: Optional[int] = None
+    y_offset: Optional[int] = None
+
+
+class BreakPeriodEvent(BaseModel):
+    start_time: int
+    end_time: int
+
+
+class EventsSection(BaseModel):
+    background: Optional[BackgroundEvent] = None
+    videos: Optional[list[VideoEvent]] = None
+    break_periods: Optional[list[BreakPeriodEvent]] = None
+    # TODO: storyboard parser
+    storyboard_data: Optional[list[str]] = None
+
+
 class BeatmapFile(BaseModel):
     file_version: int
     file_md5: str
@@ -188,6 +217,7 @@ class BeatmapFile(BaseModel):
     editor: EditorSection
     metadata: MetadataSection
     difficulty: DifficultySection
+    events: EventsSection
 
     @property
     def full_title(self) -> str:
