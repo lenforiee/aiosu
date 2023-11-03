@@ -22,16 +22,16 @@ def replay_file(mode="osu"):
 def test_parse_replay(replay_file):
     for mode in modes:
         with BytesIO(replay_file(mode)) as data:
-            replay = aiosu.utils.replay.parse_file(data)
+            replay = aiosu.utils.parsers.replay.parse_file(data)
             assert isinstance(replay, aiosu.models.ReplayFile)
 
 
 def test_write_replay(replay_file):
     for mode in modes:
         with BytesIO(replay_file(mode)) as data:
-            replay = aiosu.utils.replay.parse_file(data)
+            replay = aiosu.utils.parsers.replay.parse_file(data)
             with BytesIO() as f:
-                aiosu.utils.replay.write_replay(f, replay)
+                aiosu.utils.parsers.replay.write_replay(f, replay)
                 f.seek(0)
-                new_replay = aiosu.utils.replay.parse_file(f)
+                new_replay = aiosu.utils.parsers.replay.parse_file(f)
                 assert replay == new_replay
