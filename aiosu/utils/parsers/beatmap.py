@@ -16,6 +16,16 @@ __all__ = (
     "write_path",
 )
 
+EARLY_VERSION_TIMING_OFFSET = 24
+
+
+def _add_offsets(time: int, version: int) -> int:
+    """Add offsets to the time."""
+    if version < 5:
+        return time + EARLY_VERSION_TIMING_OFFSET
+
+    return time
+
 
 def _hash_string(s: str) -> str:
     """Hash a string."""
@@ -183,45 +193,88 @@ def _parse_events_section_line(line: str) -> tuple[str, Any]:
     values = line.split(",")
     event_type = values[0]
 
+    event: dict[str, Any] = {}
+
     if line[0] == " " or event_type in STORYBOARD_EVENTS:
         return "storyboard_data", line
 
     elif event_type == "0":
-        background: dict[str, Any] = {
-            "filename": values[2].strip('"'),
-        }
+        event["filename"] = values[2].strip('"')
 
         if len(values) > 3:
-            background["x_offset"] = int(values[3])
+            event["x_offset"] = int(values[3])
 
         if len(values) > 4:
-            background["y_offset"] = int(values[4])
+            event["y_offset"] = int(values[4])
 
-        return "background", background
+        return "background", event
 
     elif event_type in ["1", "Video"]:
-        video: dict[str, Any] = {
-            "start_time": int(values[1]),
-            "filename": values[2].strip('"'),
-        }
+        event["start_time"] = int(values[1])
+        event["filename"] = values[2].strip('"')
 
         if len(values) > 3:
-            video["x_offset"] = int(values[3])
+            event["x_offset"] = int(values[3])
 
         if len(values) > 4:
-            video["y_offset"] = int(values[4])
+            event["y_offset"] = int(values[4])
 
-        return "videos", video
+        return "videos", event
 
     elif event_type in ["2", "Break"]:
-        break_period: dict[str, Any] = {
-            "start_time": int(values[1]),
-            "end_time": int(values[2]),
-        }
+        event["start_time"] = int(values[1])
+        event["end_time"] = max(event["start_time"], int(values[2]))
 
-        return "break_periods", break_period
+        return "break_periods", event
     else:
         raise ValueError(f"Unsupported events section line: {line}")
+
+
+def _parse_timing_points_section_line(line: str) -> Any:
+    values = line.split(",")
+    timing_point: dict[str, Any] = {}
+
+    timing_point["time"] = int(values[0])
+    timing_point["beat_length"] = float(values[1])
+    timing_point["speed_multiplier"] = (
+        100 / -timing_point["beat_length"] if timing_point["beat_length"] < 0 else 1
+    )
+
+    # Legacy osu file verions don't have the following values
+
+    timing_signature = 4  # simple quadruple (4/4)
+    if len(values) >= 3:
+        timing_signature = int(values[2])
+
+    sample_set = None
+    if len(values) >= 4:
+        sample_set = int(values[3])
+
+    sample_index = 0
+    if len(values) >= 5:
+        sample_index = int(values[4])
+
+    sample_volume = None
+    if len(values) >= 6:
+        sample_volume = int(values[5])
+
+    timing_change = True
+    if len(values) >= 7:
+        timing_change = bool(int(values[6]))
+
+    if len(values) >= 8:
+        timing_point["effects"] = int(values[7])
+
+    if timing_change:
+        timing_point["bpm"] = 60000 / timing_point["beat_length"]
+
+    timing_point["time_signature"] = timing_signature
+    timing_point["sample_set"] = sample_set
+    timing_point["sample_index"] = sample_index
+    timing_point["sample_volume"] = sample_volume
+    timing_point["timing_change"] = timing_change
+
+    return timing_point
 
 
 def parse_file(file: TextIO) -> BeatmapFile:
@@ -238,6 +291,9 @@ def parse_file(file: TextIO) -> BeatmapFile:
     metadata: dict[str, Any] = {}
     difficulty: dict[str, Any] = {}
     events: dict[str, Any] = {}
+    timing_points: dict[str, Any] = {
+        "timing_points": [],
+    }
 
     buffer = file.read()
     lines = buffer.splitlines()
@@ -281,10 +337,31 @@ def parse_file(file: TextIO) -> BeatmapFile:
                 events[events_key] = events_value
                 continue
 
+            if events_key == "break_periods":
+                events_value["start_time"] = _add_offsets(
+                    events_value["start_time"],
+                    beatmap["file_version"],
+                )
+
+                events_value["end_time"] = _add_offsets(
+                    events_value["end_time"],
+                    beatmap["file_version"],
+                )
+
             if not events_key in events:
                 events[events_key] = []
 
             events[events_key].append(events_value)
+
+        elif section == "timingpoints":
+            timing_point_value = _parse_timing_points_section_line(line)
+
+            timing_point_value["time"] = _add_offsets(
+                timing_point_value["time"],
+                beatmap["file_version"],
+            )
+
+            timing_points["timing_points"].append(timing_point_value)
 
         # else:
         #     raise ValueError(f"Unsupported section: {section}")
@@ -294,6 +371,7 @@ def parse_file(file: TextIO) -> BeatmapFile:
     beatmap["metadata"] = metadata
     beatmap["difficulty"] = difficulty
     beatmap["events"] = events
+    beatmap["timing_points"] = timing_points
 
     return BeatmapFile(**beatmap)
 

@@ -4,6 +4,7 @@ This module contains models for beatmaps.
 from __future__ import annotations
 
 from enum import IntEnum
+from enum import IntFlag
 from enum import Enum
 from typing import Optional
 
@@ -131,6 +132,37 @@ class OverlayPosition(Enum):
         return cls.from_type(query)
 
 
+class Effects(IntFlag):
+    NONE = 0
+    KIAI = 1
+    OMIT_FIRST_BAR_LINE = 8
+
+    @classmethod
+    def from_type(cls, __o: object) -> Effects:
+        """Gets a sample set type.
+
+        :param __o: Object to search for
+        :type __o: object
+        :raises ValueError: If object cannot be converted to Effects
+        :return: A Effects object.
+        :rtype: aiosu.models.files.beatmap.Effects
+        """
+        if isinstance(__o, cls):
+            return __o
+
+        if isinstance(__o, int):
+            return cls(__o)
+
+        if isinstance(__o, str) and __o.isdigit():
+            return cls(int(__o))
+
+        raise ValueError(f"Effects {__o} does not exist.")
+
+    @classmethod
+    def _missing_(cls, query: object) -> Effects:
+        return cls.from_type(query)
+
+
 class GeneralSection(BaseModel):
     audio_filename: str
     audio_lead_in: int
@@ -209,6 +241,23 @@ class EventsSection(BaseModel):
     storyboard_data: Optional[list[str]] = None
 
 
+class TimingPoint(BaseModel):
+    time: int
+    beat_length: float
+    speed_multiplier: float  # velocity
+    time_signature: int
+    sample_set: Optional[SampleSet] = None
+    sample_index: int
+    sample_volume: Optional[int] = None
+    timing_change: bool
+    effects: Effects
+    bpm: Optional[float] = None
+
+
+class TimingPointsSection(BaseModel):
+    timing_points: list[TimingPoint]
+
+
 class BeatmapFile(BaseModel):
     file_version: int
     file_md5: str
@@ -218,6 +267,7 @@ class BeatmapFile(BaseModel):
     metadata: MetadataSection
     difficulty: DifficultySection
     events: EventsSection
+    timing_points: TimingPointsSection
 
     @property
     def full_title(self) -> str:
