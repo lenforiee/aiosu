@@ -3,9 +3,9 @@ This module contains models for beatmaps.
 """
 from __future__ import annotations
 
+from enum import Enum
 from enum import IntEnum
 from enum import IntFlag
-from enum import Enum
 from typing import Optional
 
 from pydantic import model_validator
@@ -14,13 +14,13 @@ from ..base import BaseModel
 from ..gamemode import Gamemode
 
 __all__ = (
-    "BeatmapFile",
-    "Countdown",
-    "SampleSet",
-    "OverlayPosition",
     "BackgroundEvent",
-    "VideoEvent",
+    "BeatmapFile",
     "BreakPeriodEvent",
+    "Countdown",
+    "OverlayPosition",
+    "SampleSet",
+    "VideoEvent",
 )
 
 EARLY_VERSION_TIMING_OFFSET = 24

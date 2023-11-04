@@ -12,7 +12,7 @@ modes = ["legacy", "lazer"]
 @pytest.fixture
 def beatmap_file():
     def _beatmap_file():
-        with open(f"tests/data/beatmap.osu", "r") as f:
+        with open(f"tests/data/beatmap.osu") as f:
             data = f.read()
         return data
 
